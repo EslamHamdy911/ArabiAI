@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, Plus, Send, Mic, Image as ImageIcon, 
-  Upload, Cpu, Download, FileCode, CheckCircle, WifiOff
+  Upload, Cpu, Download, FileCode, CheckCircle, WifiOff, Loader2,
+  Edit2, Check, X
 } from 'lucide-react';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { CodePreview } from './components/CodePreview';
@@ -24,6 +25,15 @@ const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [previewCode, setPreviewCode] = useState<string | null>(null);
+  
+  // File Upload State
+  const [modelLoading, setModelLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
+
+  // Model Renaming State
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -130,14 +140,53 @@ const App: React.FC = () => {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setSettings(prev => ({ ...prev, localModelName: file.name }));
-      // In a real app, pass file handle to Web Worker
+      
+      // Reset input value to allow re-uploading same file if needed
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+      setModelLoading(true);
+      setLoadProgress(0);
+
+      // Simulate file reading/processing progress
+      let progress = 0;
+      const interval = setInterval(() => {
+        // Random progress increment to look realistic
+        progress += Math.random() * 15; 
+        
+        if (progress >= 100) {
+          progress = 100;
+          clearInterval(interval);
+          setSettings(prev => ({ ...prev, localModelName: file.name }));
+          setModelLoading(false);
+          setLoadProgress(0);
+        } else {
+          setLoadProgress(progress);
+        }
+      }, 400); // Update every 400ms
     }
   };
 
   const handleInstallClick = () => {
     // Simulate install prompt
     alert(settings.language === 'ar' ? 'جاري تحضير ملف APK...' : 'Preparing APK for install...');
+  };
+
+  const startRenaming = () => {
+    if (settings.localModelName) {
+      setRenameValue(settings.localModelName);
+      setIsRenaming(true);
+    }
+  };
+
+  const saveRename = () => {
+    if (renameValue.trim()) {
+      setSettings(prev => ({ ...prev, localModelName: renameValue.trim() }));
+      setIsRenaming(false);
+    }
+  };
+
+  const cancelRename = () => {
+    setIsRenaming(false);
   };
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
@@ -186,30 +235,85 @@ const App: React.FC = () => {
 
         <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-4">
             
-            {/* Model Loader - Always Visible */}
-            <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-4 text-center hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-800/50">
+            {/* Model Loader */}
+            <div className={`border-2 border-dashed transition-all duration-300 rounded-lg p-4 text-center bg-gray-50 dark:bg-gray-800/50 ${modelLoading ? 'border-blue-500 cursor-wait' : 'border-gray-300 dark:border-gray-700 hover:border-blue-500'}`}>
                 <input 
                     type="file" 
                     ref={fileInputRef} 
                     className="hidden" 
                     accept=".gguf"
                     onChange={handleFileUpload}
+                    disabled={modelLoading}
                 />
-                {settings.localModelName ? (
-                    <div className="flex flex-col items-center gap-2">
-                        <Cpu size={24} className="text-green-500" />
-                        <div className="text-sm font-semibold truncate max-w-[200px]">{settings.localModelName}</div>
-                        <button 
-                             onClick={() => fileInputRef.current?.click()}
-                             className="text-xs text-blue-500 hover:underline"
-                        >
-                            {settings.language === 'ar' ? 'تغيير النموذج' : 'Change Model'}
-                        </button>
+                
+                {modelLoading ? (
+                    <div className="flex flex-col items-center gap-3 w-full">
+                        <div className="w-full flex justify-between text-xs text-gray-500 font-medium">
+                            <span className="flex items-center gap-1">
+                                <Loader2 size={12} className="animate-spin" />
+                                {settings.language === 'ar' ? 'جاري التحميل...' : 'Loading...'}
+                            </span>
+                            <span>{Math.round(loadProgress)}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                             <div 
+                                className="h-full bg-blue-500 shadow-lg shadow-blue-500/50 transition-all duration-300 ease-out"
+                                style={{ width: `${loadProgress}%` }}
+                             />
+                        </div>
+                        <span className="text-[10px] text-gray-400 animate-pulse truncate max-w-full">
+                            {settings.language === 'ar' ? 'يتم تجهيز النموذج المحلي' : 'Processing local model engine'}
+                        </span>
+                    </div>
+                ) : settings.localModelName ? (
+                    <div className="flex flex-col items-center gap-2 w-full">
+                        <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center justify-center">
+                             <Cpu size={20} />
+                        </div>
+                        
+                        {isRenaming ? (
+                            <div className="flex items-center gap-2 w-full max-w-[200px]">
+                                <input 
+                                    value={renameValue}
+                                    onChange={(e) => setRenameValue(e.target.value)}
+                                    className="flex-1 min-w-0 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') saveRename();
+                                        if (e.key === 'Escape') cancelRename();
+                                    }}
+                                />
+                                <button onClick={saveRename} className="text-green-500 hover:text-green-600"><Check size={14} /></button>
+                                <button onClick={cancelRename} className="text-red-500 hover:text-red-600"><X size={14} /></button>
+                            </div>
+                        ) : (
+                            <div className="group relative flex items-center justify-center gap-2 w-full">
+                                <div className="text-sm font-semibold truncate max-w-[180px]" title={settings.localModelName}>
+                                    {settings.localModelName}
+                                </div>
+                                <button 
+                                    onClick={startRenaming}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-500"
+                                    title={settings.language === 'ar' ? 'إعادة تسمية' : 'Rename'}
+                                >
+                                    <Edit2 size={12} />
+                                </button>
+                            </div>
+                        )}
+                        
+                        {!isRenaming && (
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="text-xs text-blue-500 hover:underline"
+                            >
+                                {settings.language === 'ar' ? 'تغيير النموذج' : 'Change Model'}
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex flex-col items-center justify-center gap-2 w-full text-gray-500 hover:text-blue-500"
+                        className="flex flex-col items-center justify-center gap-2 w-full text-gray-500 hover:text-blue-500 transition-colors"
                     >
                         <Upload size={24} />
                         <span className="text-sm font-medium">{settings.language === 'ar' ? 'تحميل نموذج GGUF' : 'Load GGUF Model'}</span>
